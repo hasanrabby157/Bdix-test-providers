@@ -1,6 +1,6 @@
 {
   "name": "BDIX Plugins",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "scrapers": [
     {
       "id": "fmftp",
@@ -8,11 +8,21 @@
       "description": "Movies and series from fmftp.net. Works only on BDIX connections.",
       "version": "1.4.0",
       "author": "hasanrabby157",
-      "supportedTypes": ["movie", "tv"],
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
       "filename": "providers/fmftp.js",
       "enabled": true,
-      "formats": ["mp4", "mkv"],
-      "contentLanguage": ["en", "hi", "bn"]
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi",
+        "bn"
+      ]
     },
     {
       "id": "ctgmovies",
@@ -20,11 +30,21 @@
       "description": "Movies and series from ctgmovies.com. Works only on BDIX connections.",
       "version": "1.3.0",
       "author": "hasanrabby157",
-      "supportedTypes": ["movie", "tv"],
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
       "filename": "providers/ctgmovies.js",
       "enabled": true,
-      "formats": ["mp4", "mkv"],
-      "contentLanguage": ["en", "hi", "bn"]
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi",
+        "bn"
+      ]
     },
     {
       "id": "discoveryftp",
@@ -32,11 +52,44 @@
       "description": "Movies from discoveryftp.net. Works only on BDIX connections.",
       "version": "1.0.2",
       "author": "hasanrabby157",
-      "supportedTypes": ["movie", "tv"],
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
       "filename": "providers/discoveryftp.js",
       "enabled": true,
-      "formats": ["mp4", "mkv"],
-      "contentLanguage": ["en", "hi", "bn", "ta"]
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi",
+        "bn",
+        "ta"
+      ]
+    },
+    {
+      "id": "cineplexbd",
+      "name": "CinePlexBD (BDIX)",
+      "description": "Movies from cineplexbd.net. Works only on BDIX connections.",
+      "version": "1.0.0",
+      "author": "hasanrabby157",
+      "supportedTypes": [
+        "movie"
+      ],
+      "filename": "providers/cineplexbd.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi",
+        "bn",
+        "ko"
+      ]
     }
   ]
 }
