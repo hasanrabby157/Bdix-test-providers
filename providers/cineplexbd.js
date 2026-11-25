@@ -126,7 +126,7 @@ function seasonEpisodeOf(url) {
   return null;
 }
 
-async function makeStream(u, r, heading, prefix) {
+async function makeStream(u, r, heading, prefix, referer) {
   var file = fileOf(u);
   var hls = /\.m3u8(\?|$)/i.test(u);
   var info = parseInfo(file + " " + (r.resolution || ""));
@@ -148,7 +148,12 @@ async function makeStream(u, r, heading, prefix) {
     name: "CPBD • " + d.join(" • "),
     title: heading + "\n" + file,
     url: u,
-    quality: info.q || "Unknown"
+    quality: info.q || "Unknown",
+    headers: {
+      "Referer": referer || (SITE + "/"),
+      "Origin": SITE,
+      "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+    }
   };
 }
 
@@ -156,7 +161,7 @@ async function buildMovie(r) {
   var html = await getText(SITE + "/player.php?id=" + r.id);
   var links = extractLinks(html);
   return await Promise.all(links.map(function (u) {
-    return makeStream(u, r, r.title + " (" + r.year + ")", "");
+    return makeStream(u, r, r.title + " (" + r.year + ")", "", SITE + "/player.php?id=" + r.id);
   }));
 }
 
@@ -172,7 +177,7 @@ async function buildSeries(r, season, episode) {
     });
   }
   return await Promise.all(picked.map(function (u) {
-    return makeStream(u, r, r.title + " " + tag, tag);
+    return makeStream(u, r, r.title + " " + tag, tag, SITE + "/watch.php?id=" + r.id);
   }));
 }
 
