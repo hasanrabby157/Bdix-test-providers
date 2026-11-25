@@ -1,6 +1,6 @@
 {
   "name": "BDIX Plugins",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "scrapers": [
     {
       "id": "fmftp",
@@ -90,6 +90,27 @@
         "hi",
         "bn",
         "ko"
+      ]
+    },
+    {
+      "id": "movielinkbd",
+      "name": "MovieLinkBD",
+      "description": "Movies and series from movielinkbd.tv (HLS streams).",
+      "version": "1.0.0",
+      "author": "hasanrabby157",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/movielinkbd.js",
+      "enabled": true,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi",
+        "bn"
       ]
     }
   ]
