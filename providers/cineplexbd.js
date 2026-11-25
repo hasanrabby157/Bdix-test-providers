@@ -37,9 +37,20 @@ function fetchT(url, opts, ms) {
   });
 }
 
-async function getText(url) {
+// Fetch a page and also collect any cookies the server sets (so the player can reuse them)
+async function getPage(url) {
   var r = await fetchT(url);
-  return await r.text();
+  var text = await r.text();
+  var raw = "";
+  try { raw = (r.headers && r.headers.get && r.headers.get("set-cookie")) || ""; } catch (e) {}
+  var skip = /^(expires|path|domain|max-age|secure|httponly|samesite|priority)$/i;
+  var pairs = [];
+  var re = /(?:^|[,;]\s*)([A-Za-z0-9_.\-]+)=([^;,\s]*)/g;
+  var m;
+  while ((m = re.exec(raw)) !== null) {
+    if (!skip.test(m[1])) pairs.push(m[1] + "=" + m[2]);
+  }
+  return { text: text, cookie: pairs.join("; ") };
 }
 
 async function searchSite(term) {
@@ -126,7 +137,7 @@ function seasonEpisodeOf(url) {
   return null;
 }
 
-async function makeStream(u, r, heading, prefix, referer) {
+async function makeStream(u, r, heading, prefix, referer, cookie) {
   var file = fileOf(u);
   var hls = /\.m3u8(\?|$)/i.test(u);
   var info = parseInfo(file + " " + (r.resolution || ""));
@@ -144,24 +155,26 @@ async function makeStream(u, r, heading, prefix, referer) {
   }
   var cat = String(r.category || "").trim();
   if (cat) d.push(cat);
+  var hdrs = {
+    "Referer": referer || (SITE + "/"),
+    "Origin": SITE,
+    "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+  };
+  if (cookie) hdrs["Cookie"] = cookie;
   return {
     name: "CPBD • " + d.join(" • "),
-    title: heading + "\n" + file,
+    title: heading + "\n" + file + (cookie ? "\n[cookie sent]" : ""),
     url: u,
     quality: info.q || "Unknown",
-    headers: {
-      "Referer": referer || (SITE + "/"),
-      "Origin": SITE,
-      "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
-    }
+    headers: hdrs
   };
 }
 
 async function buildMovie(r) {
-  var html = await getText(SITE + "/player.php?id=" + r.id);
-  var links = extractLinks(html);
+  var pg = await getPage(SITE + "/player.php?id=" + r.id);
+  var links = extractLinks(pg.text);
   return await Promise.all(links.map(function (u) {
-    return makeStream(u, r, r.title + " (" + r.year + ")", "", SITE + "/player.php?id=" + r.id);
+    return makeStream(u, r, r.title + " (" + r.year + ")", "", SITE + "/player.php?id=" + r.id, pg.cookie);
   }));
 }
 
@@ -169,15 +182,17 @@ async function buildSeries(r, season, episode) {
   var tag = "S" + pad(season) + "E" + pad(episode);
   var pages = [SITE + "/watch.php?id=" + r.id + "&season=" + Number(season), SITE + "/watch.php?id=" + r.id];
   var picked = [];
+  var cookie = "";
   for (var i = 0; i < pages.length && picked.length === 0; i++) {
-    var html = await getText(pages[i]).catch(function () { return ""; });
-    picked = extractLinks(html).filter(function (u) {
+    var pg = await getPage(pages[i]).catch(function () { return { text: "", cookie: "" }; });
+    cookie = pg.cookie;
+    picked = extractLinks(pg.text).filter(function (u) {
       var se = seasonEpisodeOf(u);
       return se && se.s === Number(season) && se.e === Number(episode);
     });
   }
   return await Promise.all(picked.map(function (u) {
-    return makeStream(u, r, r.title + " " + tag, tag, SITE + "/watch.php?id=" + r.id);
+    return makeStream(u, r, r.title + " " + tag, tag, SITE + "/watch.php?id=" + r.id, cookie);
   }));
 }
 
