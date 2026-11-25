@@ -1,0 +1,42 @@
+{
+  "name": "BDIX Plugins",
+  "version": "1.5.0",
+  "scrapers": [
+    {
+      "id": "fmftp",
+      "name": "FMFTP (BDIX)",
+      "description": "Movies and series from fmftp.net. Works only on BDIX connections.",
+      "version": "1.4.0",
+      "author": "hasanrabby157",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/fmftp.js",
+      "enabled": true,
+      "formats": ["mp4", "mkv"],
+      "contentLanguage": ["en", "hi", "bn"]
+    },
+    {
+      "id": "ctgmovies",
+      "name": "CTGMovies (BDIX)",
+      "description": "Movies and series from ctgmovies.com. Works only on BDIX connections.",
+      "version": "1.3.0",
+      "author": "hasanrabby157",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/ctgmovies.js",
+      "enabled": true,
+      "formats": ["mp4", "mkv"],
+      "contentLanguage": ["en", "hi", "bn"]
+    },
+    {
+      "id": "discoveryftp",
+      "name": "DiscoveryFTP (BDIX)",
+      "description": "Movies from discoveryftp.net. Works only on BDIX connections.",
+      "version": "1.0.2",
+      "author": "hasanrabby157",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/discoveryftp.js",
+      "enabled": true,
+      "formats": ["mp4", "mkv"],
+      "contentLanguage": ["en", "hi", "bn", "ta"]
+    }
+  ]
+}
