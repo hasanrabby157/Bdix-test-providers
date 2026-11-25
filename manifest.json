@@ -73,7 +73,7 @@
       "id": "cineplexbd",
       "name": "CinePlexBD (BDIX)",
       "description": "Movies and series from cineplexbd.net. Works only on BDIX connections.",
-      "version": "1.1.1",
+      "version": "1.2.0",
       "author": "hasanrabby157",
       "supportedTypes": [
         "movie",
