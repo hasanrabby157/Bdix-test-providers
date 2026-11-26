@@ -180,25 +180,23 @@ function pickEpisodes(pd, entryTitle, season, episode) {
   });
 }
 
-// Extra audio tracks that come with their own playlist (e.g. English dub) -> [{label,url}]
-function audioTracks(src) {
-  var out = [];
-  var arr = (src && src.audio) || [];
-  if (!Array.isArray(arr)) return out;
-  arr.forEach(function (a) {
-    var url = "";
-    var label = "";
-    if (typeof a === "string") {
-      if (/^https?:/i.test(a)) url = a;
-    } else if (a && typeof a === "object") {
-      ["master", "url", "src", "m3u8", "hls", "playlist", "uri", "file"].forEach(function (k) {
-        if (!url && typeof a[k] === "string" && /^https?:/i.test(a[k])) url = a[k];
-      });
-      label = String(a.label || a.name || a.lang || a.language || "");
-    }
-    if (url) out.push({ label: label, url: url });
-  });
-  return out;
+// The web player plays extra languages as a separate audio file synced to the video, which a single
+// Nuvio stream can't carry. So we only report which audio the stream has (default) and what else exists.
+function audioInfo(pd) {
+  var arr = (pd && pd.audio) || [];
+  var main = "";
+  var others = [];
+  if (Array.isArray(arr)) {
+    arr.forEach(function (a) {
+      if (!a || typeof a !== "object") return;
+      var label = String(a.label || a.language || a.lang || "");
+      if (!label) return;
+      if (a.is_default && !main) main = label;
+      else others.push(label);
+    });
+    if (!main && others.length) main = others.shift();
+  }
+  return { main: main, others: others };
 }
 
 // ---------- build streams for one site entry ----------
@@ -235,13 +233,9 @@ async function buildEntry(p, isTv, season, episode, seenIds) {
   }
   if (!masters.length) return [];
 
-  // main audio + any alternate audio tracks that have their own playlist
-  var expanded = [];
-  masters.forEach(function (m) {
-    expanded.push({ url: m.url, lang: String(pd.langs || "") });
-    audioTracks(m.src).forEach(function (a) {
-      if (a.url !== m.url) expanded.push({ url: a.url, lang: a.label || "Alt audio" });
-    });
+  var au = audioInfo(pd);
+  var expanded = masters.map(function (m) {
+    return { url: m.url, lang: au.main || String(pd.langs || "") };
   });
 
   var sizes = listSizes(pageHtml);
@@ -256,7 +250,9 @@ async function buildEntry(p, isTv, season, episode, seenIds) {
     var heading = (pd.title || p.core) + (tag ? " " + tag : "");
     return {
       name: "MLBD • " + d.join(" • "),
-      title: heading + (sizes.length && !isTv ? "\nFiles: " + sizes.join(" • ") : ""),
+      title: heading +
+        (au.others.length ? "\nOther audio on site: " + au.others.join(", ") : "") +
+        (sizes.length && !isTv ? "\nFiles: " + sizes.join(" • ") : ""),
       url: m.url,
       quality: q || "Unknown",
       headers: { "Referer": playerUrl, "Origin": SITE, "User-Agent": UA }
