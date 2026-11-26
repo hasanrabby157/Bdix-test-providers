@@ -202,7 +202,7 @@ function audioInfo(pd) {
 // ---------- build streams for one site entry ----------
 // ---------- download files (muxed MKV/MP4, can contain several audio tracks) ----------
 function hasFileLinks(html) {
-  return /href=["']\/file\/[A-Za-z0-9_\-]{40,}["']/.test(String(html || ""));
+  return /\/file\/[A-Za-z0-9_\-]{40,}/.test(String(html || ""));
 }
 
 function stripTags(t) {
@@ -210,20 +210,25 @@ function stripTags(t) {
 }
 
 // anchors like: Download [1080p • 1.3 GB]  ->  [{href, quality, size, ctx}]
+// tolerant of absolute/relative hrefs, quote style and attribute order
 function listFileLinks(html) {
-  html = String(html || "");
+  html = String(html || "").replace(/&amp;/g, "&");
   var out = [];
   var seen = {};
-  var re = /<a\b[^>]*href=["'](\/file\/[A-Za-z0-9_\-]{40,})["'][^>]*>([\s\S]*?)<\/a>/gi;
+  var re = /<a\b[^>]*>/gi;
   var m;
   while ((m = re.exec(html)) !== null) {
-    if (seen[m[1]]) continue;
-    seen[m[1]] = true;
-    var text = stripTags(m[2]);
+    var hm = m[0].match(/href\s*=\s*["']([^"']+)["']/i);
+    var pm = hm && hm[1].match(/\/file\/[A-Za-z0-9_\-]{40,}/);
+    if (!pm || seen[pm[0]]) continue;
+    seen[pm[0]] = true;
+    var end = m.index + m[0].length;
+    var close = html.indexOf("</a>", end);
+    var text = stripTags(html.slice(end, close > 0 ? close : end + 300));
     var qm = text.match(/\[\s*([^•\]]+?)\s*•\s*([^\]]+?)\s*\]/);
     var before = stripTags(html.slice(Math.max(0, m.index - 300), m.index));
     out.push({
-      href: m[1],
+      href: pm[0],
       quality: qm ? qm[1].trim() : "",
       size: qm ? qm[2].replace(/\s+/g, "") : "",
       ctx: before + " " + text
@@ -270,16 +275,45 @@ async function resolveFile(link, referer) {
   var sm = h1.match(/File Size<\/span>\s*<span[^>]*>\s*([^<]+?)\s*<\/span>/i);
   var size = sm ? sm[1].replace(/\s+/g, "") : link.size;
 
-  var tag = h1.match(/<a\b[^>]*data-host=["']fsl["'][^>]*>/i);
-  var hm = tag && tag[0].match(/href=["']([^"']+)["']/i);
-  if (!hm) return null;
-  var href2 = hm[1].replace(/&amp;/g, "&");
-  var url2 = /^https?:/i.test(href2) ? href2 : SITE + href2;
+  // find the FSL button: by data-host="fsl", else by its text
+  var href2 = "";
+  var h1c = h1.replace(/&amp;/g, "&");
+  var tre = /<a\b[^>]*>/gi;
+  var tm2;
+  while ((tm2 = tre.exec(h1c)) !== null && !href2) {
+    if (/data-host\s*=\s*["']fsl["']/i.test(tm2[0])) {
+      var hh = tm2[0].match(/href\s*=\s*["']([^"']+)["']/i);
+      if (hh) href2 = hh[1];
+    }
+  }
+  if (!href2) {
+    var tre2 = /<a\b[^>]*>/gi;
+    var t3;
+    while ((t3 = tre2.exec(h1c)) !== null && !href2) {
+      var close2 = h1c.indexOf("</a>", t3.index);
+      var inner = stripTags(h1c.slice(t3.index, close2 > 0 ? close2 : t3.index + 400));
+      var hh2 = t3[0].match(/href\s*=\s*["']([^"']+)["']/i);
+      if (hh2 && /FSL/i.test(inner) && /\/file\//.test(hh2[1])) href2 = hh2[1];
+    }
+  }
+  if (!href2) return null;
+  var url2 = /^https?:/i.test(href2) ? href2 : SITE + (href2.charAt(0) === "/" ? "" : "/") + href2;
 
   var direct = url2;
   if (!/workers\.dev\/d\//i.test(url2)) {
-    var h2 = await getText(url2);
-    var dm = h2.replace(/&amp;/g, "&").match(/https?:\/\/[^"'<>\s\\]*workers\.dev\/d\/[^"'<>\s\\]+/i);
+    var h2 = (await getText(url2)).replace(/&amp;/g, "&");
+    var dm = h2.match(/https?:\/\/[^"'<>\s\\]*workers\.dev\/d\/[^"'<>\s\\]+/i);
+    if (!dm) {
+      // fallback: the "download now" anchor
+      var are = /<a\b[^>]*>/gi;
+      var am;
+      while ((am = are.exec(h2)) !== null && !dm) {
+        var cl = h2.indexOf("</a>", am.index);
+        var tx = stripTags(h2.slice(am.index, cl > 0 ? cl : am.index + 300));
+        var ah = am[0].match(/href\s*=\s*["'](https?:[^"']+)["']/i);
+        if (ah && /download\s*now/i.test(tx)) dm = [ah[1]];
+      }
+    }
     if (!dm) return null;
     direct = dm[0];
   }
