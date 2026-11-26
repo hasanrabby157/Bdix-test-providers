@@ -200,18 +200,124 @@ function audioInfo(pd) {
 }
 
 // ---------- build streams for one site entry ----------
-async function buildEntry(p, isTv, season, episode, seenIds) {
-  var pageHtml = "";
-  var paths = isTv ? ["/series/", "/movie/"] : ["/movie/", "/series/"];
-  var pageUrl = "";
-  var playerUrl = "";
-  for (var i = 0; i < paths.length && !playerUrl; i++) {
-    pageUrl = SITE + paths[i] + p.slug;
-    pageHtml = await getText(pageUrl).catch(function () { return ""; });
-    playerUrl = findPlayerUrl(pageHtml);
-  }
-  if (!playerUrl) return [];
+// ---------- download files (muxed MKV/MP4, can contain several audio tracks) ----------
+function hasFileLinks(html) {
+  return /href=["']\/file\/[A-Za-z0-9_\-]{40,}["']/.test(String(html || ""));
+}
 
+function stripTags(t) {
+  return String(t || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+}
+
+// anchors like: Download [1080p • 1.3 GB]  ->  [{href, quality, size, ctx}]
+function listFileLinks(html) {
+  html = String(html || "");
+  var out = [];
+  var seen = {};
+  var re = /<a\b[^>]*href=["'](\/file\/[A-Za-z0-9_\-]{40,})["'][^>]*>([\s\S]*?)<\/a>/gi;
+  var m;
+  while ((m = re.exec(html)) !== null) {
+    if (seen[m[1]]) continue;
+    seen[m[1]] = true;
+    var text = stripTags(m[2]);
+    var qm = text.match(/\[\s*([^•\]]+?)\s*•\s*([^\]]+?)\s*\]/);
+    var before = stripTags(html.slice(Math.max(0, m.index - 300), m.index));
+    out.push({
+      href: m[1],
+      quality: qm ? qm[1].trim() : "",
+      size: qm ? qm[2].replace(/\s+/g, "") : "",
+      ctx: before + " " + text
+    });
+  }
+  return out;
+}
+
+function ctxHasEpisode(ctx, season, episode) {
+  var se = new RegExp("S0*" + Number(season) + "\\s*[._ -]?\\s*E0*" + Number(episode) + "(?![0-9])", "i");
+  if (se.test(ctx)) return true;
+  var ep = new RegExp("(?:^|[^a-z0-9])(?:EP|E|Episode)[ ._-]*0*" + Number(episode) + "(?![0-9])", "i");
+  return ep.test(ctx.slice(-120));
+}
+
+function fileTags(name) {
+  var tags = [];
+  [
+    [/blu-?ray|bdrip|brrip/i, "BluRay"],
+    [/web-?dl/i, "WEB-DL"],
+    [/web-?rip/i, "WEBRip"],
+    [/hdrip/i, "HDRip"],
+    [/x265|hevc|h[ ._]?265/i, "HEVC"],
+    [/x264|h[ ._]?264/i, "x264"],
+    [/10bit/i, "10-bit"],
+    [/\bhdr(10)?\b/i, "HDR"],
+    [/esub/i, "ESub"],
+    [/atmos/i, "Atmos"]
+  ].forEach(function (t) {
+    if (t[0].test(name) && tags.indexOf(t[1]) < 0) tags.push(t[1]);
+  });
+  var dm = name.match(/dual\s*\[([^\]]+)\]/i);
+  if (dm) tags.push("Dual Audio (" + dm[1] + ")");
+  else if (/dual|multi[ ._-]?audio/i.test(name)) tags.push("Dual Audio");
+  return tags;
+}
+
+// /file/<t1> -> find FSL button -> /file/<t2> -> direct fsl-cdn /d/ link
+async function resolveFile(link, referer) {
+  var url1 = SITE + link.href;
+  var h1 = await getText(url1);
+  var tm = h1.match(/<title>\s*(?:MovieLinkBD\.com\s*-\s*)?([^<]+?)\s*<\/title>/i);
+  var name = tm ? tm[1].trim() : "";
+  var sm = h1.match(/File Size<\/span>\s*<span[^>]*>\s*([^<]+?)\s*<\/span>/i);
+  var size = sm ? sm[1].replace(/\s+/g, "") : link.size;
+
+  var tag = h1.match(/<a\b[^>]*data-host=["']fsl["'][^>]*>/i);
+  var hm = tag && tag[0].match(/href=["']([^"']+)["']/i);
+  if (!hm) return null;
+  var href2 = hm[1].replace(/&amp;/g, "&");
+  var url2 = /^https?:/i.test(href2) ? href2 : SITE + href2;
+
+  var direct = url2;
+  if (!/workers\.dev\/d\//i.test(url2)) {
+    var h2 = await getText(url2);
+    var dm = h2.replace(/&amp;/g, "&").match(/https?:\/\/[^"'<>\s\\]*workers\.dev\/d\/[^"'<>\s\\]+/i);
+    if (!dm) return null;
+    direct = dm[0];
+  }
+  return { url: direct, name: name, size: size, page: url2 };
+}
+
+async function buildFiles(pageHtml, pageUrl, p, isTv, season, episode) {
+  var links = listFileLinks(pageHtml);
+  if (isTv) {
+    links = links.filter(function (l) { return ctxHasEpisode(l.ctx, season, episode); });
+  }
+  if (!links.length) return [];
+  var tag = isTv ? "S" + pad(season) + "E" + pad(episode) : "";
+  var res = await Promise.all(links.slice(0, 6).map(function (l) {
+    return resolveFile(l, pageUrl).then(function (f) {
+      if (!f) return null;
+      var fname = f.name || "";
+      var q = (fname.match(/(2160|1080|720|480)p/i) || [])[0] || l.quality || "";
+      var ext = (fname.match(/\.([a-z0-9]{2,4})$/i) || [])[1];
+      var d = [];
+      if (tag) d.push(tag);
+      if (q) d.push(String(q).toLowerCase());
+      d = d.concat(fileTags(fname));
+      if (f.size) d.push(f.size);
+      if (ext) d.push(ext.toUpperCase());
+      return {
+        name: "MLBD File • " + d.join(" • "),
+        title: (p.core || "") + (tag ? " " + tag : "") + "\n" + (fname || f.url.split("/").pop()),
+        url: f.url,
+        quality: /^\d{3,4}p$/i.test(q) ? String(q).toLowerCase() : (/4k/i.test(l.quality) ? "2160p" : "Unknown"),
+        headers: { "Referer": f.page, "Origin": SITE, "User-Agent": UA }
+      };
+    }).catch(function () { return null; });
+  }));
+  return res.filter(Boolean);
+}
+
+async function buildHls(p, playerUrl, pageHtml, isTv, season, episode, seenIds) {
   var playerHtml = await getText(playerUrl);
   var pd = extractPD2(playerHtml);
   if (!pd) return [];
@@ -258,6 +364,28 @@ async function buildEntry(p, isTv, season, episode, seenIds) {
       headers: { "Referer": playerUrl, "Origin": SITE, "User-Agent": UA }
     };
   }));
+}
+
+async function buildEntry(p, isTv, season, episode, seenIds) {
+  var paths = isTv ? ["/series/", "/movie/"] : ["/movie/", "/series/"];
+  var pageHtml = "";
+  var pageUrl = "";
+  var playerUrl = "";
+  for (var i = 0; i < paths.length; i++) {
+    var url = SITE + paths[i] + p.slug;
+    var html = await getText(url).catch(function () { return ""; });
+    var pu = findPlayerUrl(html);
+    if (pu || hasFileLinks(html)) { pageHtml = html; pageUrl = url; playerUrl = pu; break; }
+  }
+  if (!pageHtml) return [];
+
+  var out = [];
+  var jobs = [];
+  if (playerUrl) jobs.push(buildHls(p, playerUrl, pageHtml, isTv, season, episode, seenIds).catch(function () { return []; }));
+  jobs.push(buildFiles(pageHtml, pageUrl, p, isTv, season, episode).catch(function () { return []; }));
+  var parts = await Promise.all(jobs);
+  parts.forEach(function (x) { out = out.concat(x); });
+  return out;
 }
 
 async function getStreams(tmdbId, mediaType, season, episode) {
