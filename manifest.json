@@ -1,6 +1,6 @@
 {
   "name": "BDIX Plugins",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "scrapers": [
     {
       "id": "fmftp",
@@ -96,7 +96,7 @@
       "id": "movielinkbd",
       "name": "MovieLinkBD",
       "description": "Movies and series from movielinkbd.tv (HLS streams).",
-      "version": "1.0.0",
+      "version": "0.4.1",
       "author": "hasanrabby157",
       "supportedTypes": [
         "movie",
@@ -117,7 +117,7 @@
       "id": "movielinkbd",
       "name": "MovieLinkBD",
       "description": "Movies and series from movielinkbd.tv (HLS). Not BDIX-only.",
-      "version": "0.1.0",
+      "version": "0.4.1",
       "author": "hasanrabby157",
       "supportedTypes": [
         "movie",
