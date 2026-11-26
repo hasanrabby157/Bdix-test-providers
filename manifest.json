@@ -112,6 +112,27 @@
         "hi",
         "bn"
       ]
+    },
+    {
+      "id": "movielinkbd",
+      "name": "MovieLinkBD",
+      "description": "Movies and series from movielinkbd.tv (HLS). Not BDIX-only.",
+      "version": "0.1.0",
+      "author": "hasanrabby157",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/movielinkbd.js",
+      "enabled": true,
+      "formats": [
+        "m3u8"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi",
+        "bn"
+      ]
     }
   ]
 }
