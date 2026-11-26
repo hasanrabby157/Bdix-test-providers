@@ -180,8 +180,29 @@ function pickEpisodes(pd, entryTitle, season, episode) {
   });
 }
 
+// Extra audio tracks that come with their own playlist (e.g. English dub) -> [{label,url}]
+function audioTracks(src) {
+  var out = [];
+  var arr = (src && src.audio) || [];
+  if (!Array.isArray(arr)) return out;
+  arr.forEach(function (a) {
+    var url = "";
+    var label = "";
+    if (typeof a === "string") {
+      if (/^https?:/i.test(a)) url = a;
+    } else if (a && typeof a === "object") {
+      ["master", "url", "src", "m3u8", "hls", "playlist", "uri", "file"].forEach(function (k) {
+        if (!url && typeof a[k] === "string" && /^https?:/i.test(a[k])) url = a[k];
+      });
+      label = String(a.label || a.name || a.lang || a.language || "");
+    }
+    if (url) out.push({ label: label, url: url });
+  });
+  return out;
+}
+
 // ---------- build streams for one site entry ----------
-async function buildEntry(p, isTv, season, episode) {
+async function buildEntry(p, isTv, season, episode, seenIds) {
   var pageHtml = "";
   var paths = isTv ? ["/series/", "/movie/"] : ["/movie/", "/series/"];
   var pageUrl = "";
@@ -196,27 +217,42 @@ async function buildEntry(p, isTv, season, episode) {
   var playerHtml = await getText(playerUrl);
   var pd = extractPD2(playerHtml);
   if (!pd) return [];
+  // The index can list the same title twice; skip content we already handled
+  var idKey = pd.id ? String(pd.id) : "";
+  if (idKey) {
+    if (seenIds[idKey]) return [];
+    seenIds[idKey] = true;
+  }
 
   var masters = [];
   if (isTv) {
     pickEpisodes(pd, p.title, season, episode).forEach(function (e) {
-      masters.push({ url: e.master, label: e.label });
+      masters.push({ url: e.master, label: e.label, src: e });
     });
   } else {
     var first = (pd.episodes && pd.episodes[0] && pd.episodes[0].master) || pd.master;
-    if (pd.master || first) masters.push({ url: pd.master || first, label: "" });
+    if (pd.master || first) masters.push({ url: pd.master || first, label: "", src: pd });
   }
   if (!masters.length) return [];
 
+  // main audio + any alternate audio tracks that have their own playlist
+  var expanded = [];
+  masters.forEach(function (m) {
+    expanded.push({ url: m.url, lang: String(pd.langs || "") });
+    audioTracks(m.src).forEach(function (a) {
+      if (a.url !== m.url) expanded.push({ url: a.url, lang: a.label || "Alt audio" });
+    });
+  });
+
   var sizes = listSizes(pageHtml);
   var tag = isTv ? "S" + pad(season) + "E" + pad(episode) : "";
-  return await Promise.all(masters.map(async function (m) {
+  return await Promise.all(expanded.map(async function (m) {
     var q = await bestQuality(m.url, playerUrl);
     var d = [];
     if (tag) d.push(tag);
     d.push(q ? "Auto (up to " + q + ")" : "Auto");
     d.push("HLS");
-    if (pd.langs) d.push(String(pd.langs));
+    if (m.lang) d.push(m.lang);
     var heading = (pd.title || p.core) + (tag ? " " + tag : "");
     return {
       name: "MLBD • " + d.join(" • "),
@@ -241,12 +277,18 @@ async function getStreams(tmdbId, mediaType, season, episode) {
     var hits = await findEntries(title, isTv ? 0 : year, isTv);
     if (!hits.length) return [];
 
-    var results = await Promise.all(hits.slice(0, 4).map(function (p) {
-      return buildEntry(p, isTv, season, episode).catch(function () { return []; });
-    }));
+    var seenIds = {};
+    var results = [];
+    for (var h = 0; h < hits.slice(0, 4).length; h++) {
+      var part = await buildEntry(hits[h], isTv, season, episode, seenIds).catch(function () { return []; });
+      results.push(part);
+    }
+    // Links are signed per request, so identical-looking copies have different URLs: dedupe by what's shown
     var seen = {};
     return results.reduce(function (a, b) { return a.concat(b); }, []).filter(function (x) {
-      if (seen[x.url]) return false;
+      var key = x.name + "|" + x.title;
+      if (seen[key] || seen[x.url]) return false;
+      seen[key] = true;
       seen[x.url] = true;
       return true;
     });
